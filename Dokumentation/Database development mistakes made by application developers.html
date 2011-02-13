@@ -1,0 +1,261 @@
+<h1>Database development mistakes made by application developers</h1>
+<p>from <a href="http://stackoverflow.com/questions/621884#621891">StackOverflow</a></p>
+
+<p><strong>1. Not using appropriate indices</strong></p>
+
+<p>This is a relatively easy one but still it happens all the time.  Foreign keys should have indexes on them.  If you're using a field in a <code>WHERE</code> you should (probably) have an index on it.  Such indexes should often cover multiple columns based on the queries you need to execute.</p>
+
+<p><strong>2. Not enforcing referential integrity</strong></p>
+
+<p>Your database may vary here but if your database supports referential integrity--meaning that all foreign keys are guaranteed to point to an entity that exists--you should be using it.</p>
+
+<p>It's quite common to see this failure on MySQL databases.  I don't believe MyISAM supports it.  InnoDB does.  You'll find people who are using MyISAM or those that are using InnoDB but aren't using it anyway.</p>
+
+<p>More here:</p>
+
+<ul>
+<li><a href="http://stackoverflow.com/questions/382309/how-important-are-constraints-like-not-null-and-foreign-key-if-ill-always-contr">How important are constraints like NOT NULL and FOREIGN KEY if I’ll always control my database input with php?</a></li>
+<li><a href="http://stackoverflow.com/questions/18717/are-foreign-keys-really-necessary-in-a-database-design">Are foreign keys really necessary in a database design?</a></li>
+<li><a href="http://www.diovo.com/2008/08/are-foreign-keys-really-necessary-in-a-database-design/">Are foreign keys really necessary in a database design?</a></li>
+</ul>
+
+<p><strong>3. Using natural rather than surrogate (technical) primary keys</strong></p>
+
+<p>Natural keys are keys based on externally meaningful data that is (ostensibly) unique.  Common examples are product codes, two-letter state codes (US), social security numbers and so on.  Surrogate or technical primary keys are those that have absolutely no meaning outside the system.  They are invented purely for identifying the entity and are typically auto-incrementing fields (SQL Server, MySQL, others) or sequences (most notably Oracle).</p>
+
+<p>In my opinion you should <strong>always</strong> use surrogate keys.  This issue has come up in these questions:</p>
+
+<ul>
+<li><a href="http://stackoverflow.com/questions/404040/how-do-you-like-your-primary-keys">How do you like your primary keys?</a></li>
+<li><a href="http://stackoverflow.com/questions/337503/whats-the-best-practice-for-primary-keys-in-tables">What's the best practice for primary keys in tables?</a></li>
+<li><a href="http://stackoverflow.com/questions/506164/which-format-of-primary-key-would-you-use-in-this-situation">Which format of primary key would you use in this situation.</a></li>
+<li><a href="http://stackoverflow.com/questions/63090/surrogate-vs-natural-business-keys">Surrogate vs. natural/business keys</a></li>
+<li><a href="http://stackoverflow.com/questions/166750/should-i-have-a-dedicated-primary-key-field">Should I have a dedicated primary key field?</a></li>
+</ul>
+
+<p>This is a somewhat controversial topic on which you won't get universal agreement.  While you may find some people, who think natural keys are in some situations OK, you won't find any criticism of surrogate keys other than being arguably unnecessary.  That's quite a small downside if you ask me.</p>
+
+<p>EDIT: I know this is not how EDIT's were intended, but "you won't find any criticism of surrogate keys other than being arguably unnecessary" is false. You can find it by googling, and by reading the comments to this answer. Using surrogate keys for everything means you lose the ability to use clustered indexes properly. If you have a large table that is an awful lot to give up. </p>
+
+<p>Remember, even <a href="http://en.wikipedia.org/wiki/ISO_3166-1">countries can cease to exist</a> (for example, Yugoslavia).</p>
+
+<p><strong>4. Writing queries that require <code>DISTINCT</code> to work</strong></p>
+
+<p>You often see this in ORM-generated queries.  Look at the log output from Hibernate and you'll see all the queries begin with:</p>
+
+<pre><code>SELECT DISTINCT ...
+</code></pre>
+
+<p>This is a bit of a shortcut to ensuring you don't return duplicate rows and thus get duplicate objects.  You'll sometimes see people doing this as well.  If you see it too much it's a real red flag.  Not that <code>DISTINCT</code> is bad or doesn't have valid applications.  It does (on both counts) but it's not a surrogate or a stopgap for writing correct queries.</p>
+
+<p>From <a href="http://weblogs.sqlteam.com/markc/archive/2008/11/11/60752.aspx">Why I Hate DISTINCT</a>:</p>
+
+<blockquote>
+  <p>Where things start to go sour in my
+  opinion is when a developer is
+  building substantial query, joining
+  tables together, and all of a sudden
+  he realizes that it <strong>looks</strong> like he is
+  getting duplicate (or even more) rows
+  and his immediate response...his
+  "solution" to this "problem" is to
+  throw on the DISTINCT keyword and <strong>POOF</strong>
+  all his troubles go away.</p>
+</blockquote>
+
+<p><strong>5. Favouring aggregation over joins</strong></p>
+
+<p>Another common mistake by database application developers is to not realize how much more expensive aggregation (ie the <code>GROUP BY</code> clause) can be compared to joins.</p>
+
+<p>To give you an idea of how widespread this is, I've written on this topic several times here and been downvoted a lot for it.  For example:</p>
+
+<p>From <a href="http://stackoverflow.com/questions/477006/sql-statement-join-vs-group-by-and-having/477013#477013">SQL statement - “join” vs “group by and having”</a>:</p>
+
+<blockquote>
+  <p>First query:</p>
+
+<pre><code>SELECT userid
+FROM userrole
+WHERE roleid IN (1, 2, 3)
+GROUP by userid
+HAVING COUNT(1) = 3
+</code></pre>
+  
+  <p>Query time: 0.312 s</p>
+  
+  <p>Second query:</p>
+
+<pre><code>SELECT t1.userid
+FROM userrole t1
+JOIN userrole t2 ON t1.userid = t2.userid AND t2.roleid = 2
+JOIN userrole t3 ON t2.userid = t3.userid AND t3.roleid = 3
+AND t1.roleid = 1
+</code></pre>
+  
+  <p>Query time: 0.016 s</p>
+  
+  <p>That's right. The join version I
+  proposed is <strong>twenty times faster than
+  the aggregate version.</strong></p>
+</blockquote>
+
+<p><strong>6. Not simplifying complex queries through views</strong></p>
+
+<p>Not all database vendors support views but for those that do, they can greatly simplify queries if used judiciously.  For example, on one project I used a <a href="http://www.tdan.com/view-articles/5014/">generic Party model</a> for CRM.  This is an extremely powerful and flexible modelling technique but can lead to many joins.  In this model there were:</p>
+
+<ul>
+<li><strong>Party</strong>: people and organisations;</li>
+<li><strong>Party Role</strong>: things those parties did, for example Employee and Employer;</li>
+<li><strong>Party Role Relationship</strong>: how those roles related to each other.</li>
+</ul>
+
+<p>Example:</p>
+
+<ul>
+<li>Ted is a Person, being a subtype of Party;</li>
+<li>Ted has many roles, one of which is Employee;</li>
+<li>Intel is an organisation, being a subtype of a Party;</li>
+<li>Intel has many roles, one of which is Employer;</li>
+<li>Intel employs Ted, meaning there is a relationship between their respective roles.</li>
+</ul>
+
+<p>So there are five tables joined to link Ted to his employer.  You assume all employees are Persons (not organisations) and provide this helper view:</p>
+
+<pre><code>CREATE VIEW vw_employee AS
+SELECT p.title, p.given_names, p.surname, p.date_of_birth, p2.party_name employer_name
+FROM person p
+JOIN party py ON py.id = p.id
+JOIN party_role child ON p.id = child.party_id
+JOIN party_role_relationship prr ON child.id = prr.child_id AND prr.type = 'EMPLOYMENT'
+JOIN party_role parent ON parent.id = prr.parent_id = parent.id
+JOIN party p2 ON parent.party_id = p2.id
+</code></pre>
+
+<p>And suddenly you have a very simple view of the data you want but on a highly flexible data model.</p>
+
+<p><strong>7. Not sanitizing input</strong></p>
+
+<p>This is a huge one.  Now I like PHP but if you don't know what you're doing it's really easy to create sites vulnerable to attack.  Nothing sums it up better than the <a href="http://stackoverflow.com/questions/84556/whats-your-favorite-programmer-cartoon/84629#84629">story of little Bobby Tables</a>.</p>
+
+<p>Data provided by the user by way of URLs, form data <strong>and cookies</strong> should always be treated as hostile and sanitized.  Make sure you're getting what you expect.</p>
+
+<p><strong>8. Not using prepared statements</strong></p>
+
+<p>Prepared statements are when you compile a query minus the data used in inserts, updates and <code>WHERE</code> clauses and then supply that later.  For example:</p>
+
+<pre><code>SELECT * FROM users WHERE username = 'bob'
+</code></pre>
+
+<p>vs</p>
+
+<pre><code>SELECT * FROM users WHERE username = ?
+</code></pre>
+
+<p>or</p>
+
+<pre><code>SELECT * FROM users WHERE username = :username
+</code></pre>
+
+<p>depending on your platform.</p>
+
+<p>I've seen databases brought to their knees by doing this.  Basically, each time any modern database encounters a new query it has to compile it.  If it encounters a query it's seen before, you're giving the database the opportunity to cache the compiled query and the execution plan.  By doing the query a lot you're giving the database the opportunity to figure that out and optimize accordingly (for example, by pinning the compiled query in memory).</p>
+
+<p>Using prepared statements will also give you meaningful statistics about how often certain queries are used.</p>
+
+<p>Prepared statements will also better protect you against SQL injection attacks.</p>
+
+<p><strong>9. Not normalizing enough</strong></p>
+
+<p><a href="http://en.wikipedia.org/wiki/Database_normalization">Database normalization</a> is basically the process of optimizing database design or how you organize your data into tables.</p>
+
+<p>Just this week I ran across some code where someone had imploded an array and inserted it into a single field in a database.  Normalizing that would be to treat element of that array as a separate row in a child table (ie a one-to-many relationship).</p>
+
+<p>This also came up in <a href="http://stackoverflow.com/questions/620645/best-method-for-storing-a-list-of-user-ids">Best method for storing a list of user IDs</a>:</p>
+
+<blockquote>
+  <p>I've seen in other systems that the list is stored in a serialized PHP array.</p>
+</blockquote>
+
+<p>But lack of normalization comes in many forms.</p>
+
+<p>More:</p>
+
+<ul>
+<li><a href="http://articles.techrepublic.com.com/5100-10878_11-6140413.html">Normalization: How far is far enough?</a></li>
+<li><a href="http://www.sqlmag.com/Article/ArticleID/4887/sql_server_4887.html">SQL by Design: Why You Need Database Normalization </a></li>
+</ul>
+
+<p><strong>10. Normalizing too much</strong></p>
+
+<p>This may seem like a contradiction to the previous point but normalization, like many things, is a tool.  It is a means to an end and not an end in and of itself.  I think many developers forget this and start treating a "means" as an "end".  Unit testing is a prime example of this.</p>
+
+<p>I once worked on a system that had a huge hierarchy for clients that went something like:</p>
+
+<pre><code>Licensee -&gt;  Dealer Group -&gt; Company -&gt; Practice -&gt; ...
+</code></pre>
+
+<p>such that you had to join about 11 tables together before you could get any meaningful data.  It was a good example of normalization taken too far.</p>
+
+<p>More to the point, careful and considered denormalization can have huge performance benefits but you have to be really careful when doing this.</p>
+
+<p>More:</p>
+
+<ul>
+<li><a href="http://www.selikoff.net/blog/2008/11/19/why-too-much-database-normalization-can-be-a-bad-thing/">Why too much Database Normalization can be a Bad Thing</a></li>
+<li><a href="http://stackoverflow.com/questions/496508/how-far-to-take-normalization-in-database-design">How far to take normalization in database design?</a></li>
+<li><a href="http://www.25hoursaday.com/weblog/CommentView.aspx?guid=cc0e740c-a828-4b9d-b244-4ee96e2fad4b">When Not to Normalize your SQL Database</a></li>
+<li><a href="http://www.codinghorror.com/blog/archives/001152.html">Maybe Normalizing Isn't Normal</a></li>
+<li><a href="http://highscalability.com/mother-all-database-normalization-debates-coding-horror">The Mother of All Database Normalization Debates on Coding Horror</a></li>
+</ul>
+
+<p><strong>11. Using exclusive arcs</strong></p>
+
+<p>An exclusive arc is a common mistake where a table is created with two or more foreign keys where one and only one of them can be non-null.  <strong>Big mistake.</strong>  For one thing it becomes that much harder to maintain data integrity.  After all, even with referential integrity, nothing is preventing two or more of these foreign keys from being set (complex check constraints notwithstanding).</p>
+
+<p>From <a href="http://books.google.com.au/books?id=7">A Practical Guide to Relational Database Design</a>:</p>
+
+<blockquote>
+  <p>We have strongly advised against exclusive arc construction wherever
+  possible, for the good reason that they can be awkward to write code
+  and pose more maintenance difficulties.</p>
+</blockquote>
+
+<p><strong>12. Not doing performance analysis on queries at all</strong></p>
+
+<p>Pragmatism reigns supreme, particularly in the database world. If you're sticking to principles to the point that they've become a dogma then you've quite probably made mistakes.  Take the example of the aggregate queries from above.  The aggregate version might look "nice" but its performance is woeful.  A performance comparison should've ended the debate (but it didn't) but more to the point: spouting such ill-informed views in the first place is ignorant, even dangerous.</p>
+
+<p><strong>13. Over-reliance on UNION ALL and particularly UNION constructs</strong></p>
+
+<p>A UNION in SQL terms merely concatenates congruent data sets, meaning they have the same type and number of columns.  The difference between them is that UNION ALL is a simple concatenation and should be preferred wherever possible whereas a UNION will implicitly do a DISTINCT to remove duplicate tuples.</p>
+
+<p>UNIONs, like DISTINCT, have their place.  There are valid applications.  But if you find yourself doing a lot of them, particularly in subqueries, then you're probably doing something wrong.  That might be a case of poor query construction or a poorly designed data model forcing you to do such things.</p>
+
+<p>UNIONs, particularly when used in joins or dependent subqueries, can cripple a database.  Try to avoid them whenever possible.</p>
+
+<p><strong>14. Using OR conditions in queries</strong></p>
+
+<p>This might seem harmless.  After all, ANDs are OK.  OR should be OK too right?  Wrong.  Basically an AND condition <strong>restricts</strong> the data set whereas an OR condition <strong>grows</strong> it but not in a way that lends itself to optimisation.  Particularly when the different OR conditions might intersect thus forcing the optimizer to effectively to a DISTINCT operation on the result.</p>
+
+<p>Bad:</p>
+
+<pre><code>... WHERE a = 2 OR a = 5 OR a = 11
+</code></pre>
+
+<p>Better:</p>
+
+<pre><code>... WHERE a IN (2, 5, 11)
+</code></pre>
+
+<p>Now your SQL optimizer may effectively turn the first query into the second.  But it might not.  Just don't do it.</p>
+
+<p><strong>15. Not designing their data model to lend itself to high-performing solutions</strong></p>
+
+<p>This is a hard point to quantify.  It is typically observed by its effect.  If you find yourself writing gnarly queries for relatively simple tasks or that queries for finding out relatively straightforward information are not efficient, then you probably have a poor data model.</p>
+
+<p>In some ways this point summarizes all the earlier ones but it's more of a cautionary tale that doing things like query optimisation is often done first when it should be done second.  First and foremost you should ensure you have a good data model before trying to optimize the performance.  As Knuth said:</p>
+
+<blockquote>
+  <p>Premature optimization is the root of all evil</p>
+</blockquote>
+
+<p>Ak0YiKQV0C&amp;pg=PA110&amp;lpg=PA110&amp;dq=%22exclusive+arc%22+database&amp;source=bl&amp;ots=AyNPWsac<em>_&amp;sig=gBFIerXckQlVpRdd6ycI5JEgq3U&amp;hl=en&amp;ei=PzGzSZfrFcPVkAWWyZDZBA&amp;sa=X&amp;oi=book</em>result&amp;resnum=1&amp;ct=result</p>
